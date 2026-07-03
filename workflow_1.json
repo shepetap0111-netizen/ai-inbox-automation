@@ -1,0 +1,798 @@
+{
+  "name": "AI Classifier (Groq + fallback + Sheets)",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "id": "0521d84d-3ad3-4e7e-b789-6dd9358ddc77",
+      "name": "Gmail: новые письма",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -112
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "0q9E756jZgocoGbL",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "1977be65-b819-4ae7-b65a-74418b107a04",
+      "name": "Telegram: новые сообщения",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        64
+      ],
+      "webhookId": "3d7a9fb4-7440-46f8-8261-0db0f8fce12f",
+      "credentials": {
+        "telegramApi": {
+          "id": "nUgJKmt5a0geaB6u",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"source\": \"email\",\n  \"contact_name\": \"{{ ($json.from && $json.from.value && $json.from.value[0] && $json.from.value[0].name) || ($json.from && $json.from.text) || 'Клиент' }}\",\n  \"contact_email\": \"{{ ($json.from && $json.from.value && $json.from.value[0] && $json.from.value[0].address) || '' }}\",\n  \"contact_phone\": \"\",\n  \"raw_text\": \"{{ ($json.text || $json.snippet || $json.subject || '').replace(/\\\"/g, ' ').replace(/\\n/g, ' ') }}\",\n  \"subject\": \"{{ ($json.subject || '').replace(/\\\"/g, ' ') }}\",\n  \"chat_id\": \"\",\n  \"received_at\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "ad923df6-1bce-4b35-a9ce-aa3111d2c475",
+      "name": "Нормализация: Email",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        16,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"source\": \"telegram\",\n  \"contact_name\": \"{{ ($json.message && $json.message.from && $json.message.from.first_name) || 'Клиент' }}\",\n  \"username\": \"{{ ($json.message && $json.message.from && $json.message.from.username) || '' }}\",\n  \"contact_email\": \"\",\n  \"contact_phone\": \"\",\n  \"raw_text\": \"{{ ($json.message && $json.message.text || '').replace(/\\\"/g, ' ').replace(/\\n/g, ' ') }}\",\n  \"subject\": \"\",\n  \"chat_id\": \"{{ $json.message && $json.message.chat && $json.message.chat.id }}\",\n  \"received_at\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "4a749669-cf48-45d4-ab67-b4e152211357",
+      "name": "Нормализация: Telegram",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        64
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "fa46b6bd-b880-4b23-bb92-94b4140a677f",
+      "name": "Объединение источников",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        208,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "high",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "78296a18-ce39-4483-a991-6b6bef98bab4"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "bd803f92-f4af-4499-ab86-1169d3d00bdc",
+      "name": "Приоритет?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1616,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_ADMIN_CHAT_ID",
+        "text": "=🔴 СРОЧНАЯ ЗАЯВКА\n\nКатегория: {{ $('Парсинг ответа LLM').item.json.category }}\nИсточник: {{ $('Вход (из Merge)').item.json.source }}\nИмя: {{ $('Вход (из Merge)').item.json.contact_name }}\nТекст: {{ $('Вход (из Merge)').item.json.raw_text }}",
+        "additionalFields": {}
+      },
+      "id": "8d56cb58-fd05-4378-88c2-f833388f292d",
+      "name": "Уведомить админа",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1904,
+        -160
+      ],
+      "webhookId": "006837f1-ba50-4eba-9d04-0d3bd524011f",
+      "credentials": {
+        "telegramApi": {
+          "id": "nUgJKmt5a0geaB6u",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.source }}",
+              "rightValue": "email",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "edc1748d-566c-427a-9b79-18b14f9a069b",
+      "name": "Email или Telegram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1936,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Нормализация: Email').item.json.contact_email }}",
+        "subject": "=={{ 'Обращение: ' + $('Парсинг ответа LLM').item.json.category }}",
+        "message": "={{ $('Парсинг ответа LLM').item.json.reply }}",
+        "options": {}
+      },
+      "id": "b336d1e7-c0f7-4f28-b34c-d33fec5b61a5",
+      "name": "Ответ на Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2272,
+        -176
+      ],
+      "webhookId": "a4744513-3b47-4e32-bc08-13ac64303c20",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "0q9E756jZgocoGbL",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Нормализация: Telegram').item.json.chat_id }}",
+        "text": "={{ $('Парсинг ответа LLM').item.json.reply }}",
+        "additionalFields": {}
+      },
+      "id": "0833cb06-5fa1-4368-8241-319c1e116d65",
+      "name": "Ответ в Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2272,
+        320
+      ],
+      "webhookId": "f6c42f5c-57f5-4e6d-b300-655541c505f7",
+      "credentials": {
+        "telegramApi": {
+          "id": "nUgJKmt5a0geaB6u",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "7db99017-dca8-499b-b5e7-75db127bc34e",
+      "name": "Вход (из Merge)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        352,
+        -144
+      ],
+      "notes": "Ожидает поля: source (email|telegram), from, text"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0,\n  \"response_format\": { \"type\": \"json_object\" },\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Ты обрабатываешь входящие обращения клиентов. Верни ТОЛЬКО валидный JSON без markdown и без пояснений. Схема ответа: {\\\"category\\\": string, \\\"priority\\\": \\\"high\\\"|\\\"medium\\\"|\\\"low\\\", \\\"sentiment\\\": \\\"positive\\\"|\\\"neutral\\\"|\\\"negative\\\", \\\"summary\\\": string, \\\"reply\\\": string}. Правила: category — строго одно из значений: support, sales, spam, other. priority — high только для срочных проблем и жалоб, иначе medium или low. summary — краткая суть обращения на русском, не длиннее 15 слов. reply — вежливый готовый ответ клиенту на русском по сути его обращения, 1-2 предложения, от лица компании, без плейсхолдеров.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.raw_text || \"\") }}\n    }\n  ]\n}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "121cd0b4-0d67-491e-baf8-15924d8e2c1a",
+      "name": "Groq: классификация (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        512,
+        -144
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "STIofd0h45KlV0dB",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "notes": "Credential: Header Auth, Name=Authorization, Value=Bearer <groq_api_key>. On Error=Continue для fallback."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-groq-ok",
+              "leftValue": "={{ $json.choices?.[0]?.message?.content }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1b896568-c00d-4fff-a090-ec948fb6ef51",
+      "name": "Groq ответил?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        704,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "source",
+              "value": "={{ $('Вход (из Merge)').item.json.source }}",
+              "type": "string"
+            },
+            {
+              "id": "s2",
+              "name": "from",
+              "value": "={{ $('Вход (из Merge)').item.json.contact_name || 'без имени' }}",
+              "type": "string"
+            },
+            {
+              "id": "s3",
+              "name": "text",
+              "value": "={{ $('Вход (из Merge)').item.json.raw_text }}",
+              "type": "string"
+            },
+            {
+              "id": "s4",
+              "name": "category",
+              "value": "={{ JSON.parse($json.choices[0].message.content).category }}",
+              "type": "string"
+            },
+            {
+              "id": "s5",
+              "name": "priority",
+              "value": "={{ JSON.parse($json.choices[0].message.content).priority }}",
+              "type": "string"
+            },
+            {
+              "id": "s6",
+              "name": "sentiment",
+              "value": "={{ JSON.parse($json.choices[0].message.content).sentiment }}",
+              "type": "string"
+            },
+            {
+              "id": "s7",
+              "name": "summary",
+              "value": "={{ JSON.parse($json.choices[0].message.content).summary }}",
+              "type": "string"
+            },
+            {
+              "id": "s8",
+              "name": "method",
+              "value": "llm",
+              "type": "string"
+            },
+            {
+              "id": "a13c22e5-feb5-41d6-92da-d76eed8950fc",
+              "name": "=reply",
+              "value": "={{ JSON.parse($json.choices[0].message.content).reply }}",
+              "type": "string"
+            },
+            {
+              "id": "d721f16b-54e4-4835-b8c5-85cc1114d307",
+              "name": "contact_id",
+              "value": "={{ $('Вход (из Merge)').item.json.chat_id || $('Вход (из Merge)').item.json.contact_email }}",
+              "type": "string"
+            },
+            {
+              "id": "947bbf12-cc77-44c7-8727-897d81971f10",
+              "name": "username",
+              "value": "={{ $('Вход (из Merge)').item.json.username }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "74b724a4-090a-4f85-b664-49825e1dedac",
+      "name": "Парсинг ответа LLM",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        896,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fallback: rule-based классификация по ключевым словам\nconst src = $('Вход (из Merge)').item.json;\nconst text = (src.raw_text || '').toLowerCase();\n\nfunction has(arr) { return arr.some(w => text.includes(w)); }\n\nlet category = 'other';\nlet priority = 'low';\nlet sentiment = 'neutral';\n\nif (has(['ошибк','не работает','сломал','срочно','проблем','баг','error','broken'])) {\n  category = 'support'; priority = 'high';\n} else if (has(['куп','цена','стоим','заказ','оплат','тариф','price','buy'])) {\n  category = 'sales'; priority = 'medium';\n} else if (has(['выигр','приз','казино','крипт','viagra','free money','лохотрон'])) {\n  category = 'spam'; priority = 'low';\n}\n\nif (has(['спасибо','отлично','супер','благодар','круто'])) sentiment = 'positive';\nelse if (has(['плохо','ужас','злю','недоволен','отврат','верните деньги'])) sentiment = 'negative';\n\nconst summary = (src.raw_text || '').slice(0, 80);\n\nreturn [{ json: {\n  source: src.source,\n  from: src.contact_name,\n  text: src.raw_text,\n  category, priority, sentiment, summary,\n  method: 'rules'\n} }];"
+      },
+      "id": "c9fce791-17e7-4366-9f89-2d7c70b5f6e7",
+      "name": "Fallback: правила",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "h1",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "h2",
+              "name": "dedup_hash",
+              "value": "={{ 'id_' + ($('Вход (из Merge)').item.json.source || '') + '|' + ($('Вход (из Merge)').item.json.chat_id || '') + '|' + ($('Вход (из Merge)').item.json.raw_text || '').slice(0,100) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "5d71ea7e-1208-4879-8eb5-82e7b3af9aa2",
+      "name": "Метаданные + dedup_hash",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1152,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Лист1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "dedup_hash": "={{ $json.dedup_hash }}",
+            "timestamp": "="
+          },
+          "matchingColumns": [
+            "dedup_hash"
+          ],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "from",
+              "displayName": "from",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "priority",
+              "displayName": "priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "method",
+              "displayName": "method",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "dedup_hash",
+              "displayName": "dedup_hash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "8434d7fe-3415-4cb1-812c-9eb5dd992e3c",
+      "name": "Запись в Google Sheets1",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1408,
+        -112
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "gXIUduZym66NvrCg",
+          "name": "Google Sheets OAuth2 API"
+        }
+      },
+      "notes": "appendOrUpdate по dedup_hash = дедупликация. Заголовки в 1-й строке листа должны совпадать с колонками."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail: новые письма": {
+      "main": [
+        [
+          {
+            "node": "Нормализация: Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram: новые сообщения": {
+      "main": [
+        [
+          {
+            "node": "Нормализация: Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Нормализация: Email": {
+      "main": [
+        [
+          {
+            "node": "Объединение источников",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Нормализация: Telegram": {
+      "main": [
+        [
+          {
+            "node": "Объединение источников",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Объединение источников": {
+      "main": [
+        [
+          {
+            "node": "Вход (из Merge)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Приоритет?": {
+      "main": [
+        [
+          {
+            "node": "Уведомить админа",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email или Telegram?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Уведомить админа": {
+      "main": [
+        [
+          {
+            "node": "Email или Telegram?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email или Telegram?": {
+      "main": [
+        [
+          {
+            "node": "Ответ на Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ответ в Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Вход (из Merge)": {
+      "main": [
+        [
+          {
+            "node": "Groq: классификация (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq: классификация (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Groq ответил?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq ответил?": {
+      "main": [
+        [
+          {
+            "node": "Парсинг ответа LLM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fallback: правила",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Парсинг ответа LLM": {
+      "main": [
+        [
+          {
+            "node": "Метаданные + dedup_hash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback: правила": {
+      "main": [
+        [
+          {
+            "node": "Метаданные + dedup_hash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Метаданные + dedup_hash": {
+      "main": [
+        [
+          {
+            "node": "Запись в Google Sheets1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Запись в Google Sheets1": {
+      "main": [
+        [
+          {
+            "node": "Приоритет?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "66ce5136-a554-4fcb-aa0c-cfd8ea56ddcb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "148c3186165d393874113474d90c5695ee227dcb9e011be3eb357e33788edbe5"
+  },
+  "nodeGroups": [],
+  "id": "gRtAMa9TnWN8lZZ0",
+  "tags": []
+}
